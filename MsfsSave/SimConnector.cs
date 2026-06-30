@@ -10,7 +10,7 @@ public sealed class SimConnector : ISimConnector
     private const int WM_USER_SIMCONNECT = 0x0402;
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(5);
 
-    private enum DEFINITIONS { Aircraft, Fuel, InitPosition, AtcId, PayloadCount, PayloadStation }
+    private enum DEFINITIONS { Aircraft, Fuel, InitPosition, AtcId, PayloadCount, PayloadStation, FuelWrite }
     private enum REQUESTS { Aircraft, Fuel, PayloadCount, PayloadStation }
 
     // Ordningen MÅSTE matcha AddToDataDefinition-anropen nedan.
@@ -33,6 +33,15 @@ public sealed class SimConnector : ISimConnector
                       leftMainCap, leftAuxCap, leftTipCap,
                       rightMainCap, rightAuxCap, rightTipCap,
                       external1Cap, external2Cap;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct FuelWriteData
+    {
+        public double centerQty, center2Qty, center3Qty,
+                      leftMainQty, leftAuxQty, leftTipQty,
+                      rightMainQty, rightAuxQty, rightTipQty,
+                      external1Qty, external2Qty;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
@@ -86,6 +95,7 @@ public sealed class SimConnector : ISimConnector
 
         DefineAircraft();
         DefineFuel();
+        DefineFuelWrite();
         DefineInitPosition();
         DefineAtcId();
         DefinePayloadCount();
@@ -124,6 +134,13 @@ public sealed class SimConnector : ISimConnector
         foreach (var (_, var) in FuelTanks)
             _sc!.AddToDataDefinition(DEFINITIONS.Fuel, var.Replace("QUANTITY", "CAPACITY"), "gallons", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         _sc!.RegisterDataDefineStruct<FuelData>(DEFINITIONS.Fuel);
+    }
+
+    private void DefineFuelWrite()
+    {
+        foreach (var (_, var) in FuelTanks)
+            _sc!.AddToDataDefinition(DEFINITIONS.FuelWrite, var, "gallons", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        _sc!.RegisterDataDefineStruct<FuelWriteData>(DEFINITIONS.FuelWrite);
     }
 
     private void DefineInitPosition()
@@ -318,19 +335,14 @@ public sealed class SimConnector : ISimConnector
             qty[i] = FuelMath.ClampToCapacity(requested, caps[i]);
         }
 
-        var toSet = new FuelData
+        var toSet = new FuelWriteData
         {
             centerQty = qty[0], center2Qty = qty[1], center3Qty = qty[2],
             leftMainQty = qty[3], leftAuxQty = qty[4], leftTipQty = qty[5],
             rightMainQty = qty[6], rightAuxQty = qty[7], rightTipQty = qty[8],
-            external1Qty = qty[9], external2Qty = qty[10],
-            // kapacitetsfälten skrivs aldrig (read-only i praktiken); skickas oförändrade.
-            centerCap = caps[0], center2Cap = caps[1], center3Cap = caps[2],
-            leftMainCap = caps[3], leftAuxCap = caps[4], leftTipCap = caps[5],
-            rightMainCap = caps[6], rightAuxCap = caps[7], rightTipCap = caps[8],
-            external1Cap = caps[9], external2Cap = caps[10]
+            external1Qty = qty[9], external2Qty = qty[10]
         };
-        _sc.SetDataOnSimObject(DEFINITIONS.Fuel, SimConnect.SIMCONNECT_OBJECT_ID_USER,
+        _sc.SetDataOnSimObject(DEFINITIONS.FuelWrite, SimConnect.SIMCONNECT_OBJECT_ID_USER,
             SIMCONNECT_DATA_SET_FLAG.DEFAULT, toSet);
     }
 
