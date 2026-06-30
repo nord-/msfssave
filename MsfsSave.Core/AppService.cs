@@ -1,7 +1,7 @@
 namespace MsfsSave.Core;
 
 public record SaveResult(AircraftState State, bool Overwritten);
-public record LoadResult(AircraftState State, bool TitleMismatch, string LoadedTitle, bool AtcIdSet);
+public record LoadResult(AircraftState SavedState, bool TitleMismatch, string LoadedTitle, bool AtcIdSet);
 
 /// <summary>Orkestrerar spara/ladda mellan simulatorn och lagret.</summary>
 public class AppService
