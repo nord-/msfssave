@@ -1308,9 +1308,14 @@ git commit -m "Lägg till meny-loop och programstart"
 **Files:**
 - Modify: `MsfsSave/SimConnector.cs` (payload-avläsning och -skrivning)
 
-- [ ] **Step 1: Färdigställ payload-avläsning**
+- [x] **Step 1: Payload-avläsning/-skrivning — KLAR (commits b875dbd + b28c93e)**
 
-Ersätt `CapturePayload`/`ReadSinglePayloadWeight`-stubbarna med en implementation som först läser `PAYLOAD STATION COUNT`, sedan definierar en struct med `MaxPayloadStations` doubles för `PAYLOAD STATION WEIGHT:1..N` ("pounds"), läser dem i ett svep, och bara behåller de `count` första. Skriv tillbaka i `Restore` via samma definition med `SetDataOnSimObject`. Validera marshaling mot det laddade planet (loggа värden och jämför med MSFS payload-menyn).
+Payload är implementerad med en **per-station-approach** (robust mot okänt antal stationer): läser `PAYLOAD STATION COUNT`, loopar `1..count` och läser/skriver `PAYLOAD STATION WEIGHT:{i}` via en återanvänd data-definition (`ClearDataDefinition` + register per index). `RestorePayload` är best-effort per station (saknad station i annat plan hoppas över). Återstår bara att **validera marshaling mot ett verkligt plan** (jämför avlästa vikter med MSFS payload-meny).
+
+**Watch-during-sim (från Opus-granskningen):**
+- Bekräfta att den snabba `ClearDataDefinition`/`RegisterDataDefineStruct`-cykeln per station inte ger `SIMCONNECT_RECV_EXCEPTION` (loggas via `OnRecvException` till stderr).
+- Vid första bränsle-restore: kolla stderr för exceptions om någon tank/station inte finns i planet (skrivs men förväntas ignoreras av simen).
+- `Capture()` kan blockera upp till ~5 s per uteblivet svar om simen hänger sig mitt i en avläsning.
 
 - [ ] **Step 2: Verifiera ANSI-marshaling av strängfält**
 
