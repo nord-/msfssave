@@ -63,6 +63,7 @@ public sealed class SimConnector : ISimConnector
     private AircraftData? _lastAircraft;
     private FuelData? _lastFuel;
     private bool _received;
+    private REQUESTS? _awaiting;
 
     public bool IsConnected => _sc != null;
     public string CurrentTitle { get; private set; } = "";
@@ -80,10 +81,17 @@ public sealed class SimConnector : ISimConnector
         DefineInitPosition();
         DefineAtcId();
 
-        // Initial avläsning för header.
-        var snapshot = Capture();
-        CurrentTitle = snapshot.Title;
-        CurrentAtcId = snapshot.Registration;
+        // Initial avläsning för header (icke-kritisk — kan misslyckas om inget plan är laddat än).
+        try
+        {
+            var snapshot = Capture();
+            CurrentTitle = snapshot.Title;
+            CurrentAtcId = snapshot.Registration;
+        }
+        catch
+        {
+            // Header fylls vid första lyckade Capture istället.
+        }
     }
 
     private void DefineAircraft()
@@ -123,23 +131,31 @@ public sealed class SimConnector : ISimConnector
 
     private void OnRecvData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
     {
-        switch ((REQUESTS)data.dwRequestID)
+        var req = (REQUESTS)data.dwRequestID;
+        switch (req)
         {
             case REQUESTS.Aircraft: _lastAircraft = (AircraftData)data.dwData[0]; break;
             case REQUESTS.Fuel: _lastFuel = (FuelData)data.dwData[0]; break;
         }
-        _received = true;
+        if (_awaiting == req) _received = true;
     }
 
-    private void PumpUntilReceived()
+    private void PumpUntilReceived(REQUESTS expected)
     {
+        _awaiting = expected;
         _received = false;
         var deadline = DateTime.UtcNow + ReadTimeout;
         while (!_received && DateTime.UtcNow < deadline)
         {
-            if (_event.WaitOne(TimeSpan.FromMilliseconds(200)))
-                _sc!.ReceiveMessage();
+            if (_sc == null) break;
+            try
+            {
+                if (_event.WaitOne(TimeSpan.FromMilliseconds(200)))
+                    _sc.ReceiveMessage();
+            }
+            catch (ObjectDisposedException) { break; }
         }
+        _awaiting = null;
         if (!_received) throw new TimeoutException("Inget svar från simulatorn inom tidsgränsen.");
     }
 
@@ -147,15 +163,17 @@ public sealed class SimConnector : ISimConnector
     {
         if (_sc == null) throw new InvalidOperationException("Inte ansluten till simulatorn.");
 
+        _lastAircraft = null;
         _sc.RequestDataOnSimObject(REQUESTS.Aircraft, DEFINITIONS.Aircraft, SimConnect.SIMCONNECT_OBJECT_ID_USER,
             SIMCONNECT_PERIOD.ONCE, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0, 0, 0);
-        PumpUntilReceived();
-        var ac = _lastAircraft!.Value;
+        PumpUntilReceived(REQUESTS.Aircraft);
+        var ac = _lastAircraft ?? throw new InvalidOperationException("Fick inga flygplansdata från simulatorn.");
 
+        _lastFuel = null;
         _sc.RequestDataOnSimObject(REQUESTS.Fuel, DEFINITIONS.Fuel, SimConnect.SIMCONNECT_OBJECT_ID_USER,
             SIMCONNECT_PERIOD.ONCE, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0, 0, 0);
-        PumpUntilReceived();
-        var fuel = _lastFuel!.Value;
+        PumpUntilReceived(REQUESTS.Fuel);
+        var fuel = _lastFuel ?? throw new InvalidOperationException("Fick ingen bränsledata från simulatorn.");
 
         var fuelQty = new[]
         {
@@ -249,10 +267,11 @@ public sealed class SimConnector : ISimConnector
     private void RestoreFuel(AircraftState state)
     {
         // Hämta kapaciteter via en färsk avläsning.
+        _lastFuel = null;
         _sc!.RequestDataOnSimObject(REQUESTS.Fuel, DEFINITIONS.Fuel, SimConnect.SIMCONNECT_OBJECT_ID_USER,
             SIMCONNECT_PERIOD.ONCE, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0, 0, 0);
-        PumpUntilReceived();
-        var fuel = _lastFuel!.Value;
+        PumpUntilReceived(REQUESTS.Fuel);
+        var fuel = _lastFuel ?? throw new InvalidOperationException("Fick ingen bränsledata från simulatorn.");
         var caps = new[]
         {
             fuel.centerCap, fuel.center2Cap, fuel.center3Cap,
@@ -303,10 +322,11 @@ public sealed class SimConnector : ISimConnector
     {
         try
         {
+            _lastAircraft = null;
             _sc!.RequestDataOnSimObject(REQUESTS.Aircraft, DEFINITIONS.Aircraft, SimConnect.SIMCONNECT_OBJECT_ID_USER,
                 SIMCONNECT_PERIOD.ONCE, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0, 0, 0);
-            PumpUntilReceived();
-            return _lastAircraft!.Value.title ?? "";
+            PumpUntilReceived(REQUESTS.Aircraft);
+            return _lastAircraft?.title ?? CurrentTitle;
         }
         catch
         {
