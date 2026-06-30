@@ -1220,7 +1220,7 @@ public class Menu
 
         var result = _app.Load(chosen.Registration);
         if (result.TitleMismatch)
-            Console.WriteLine($"  VARNING: sparad som \"{result.State.Title}\" men \"{result.LoadedTitle}\" är laddat — position/bränsle kanske inte passar.");
+            Console.WriteLine($"  VARNING: sparad som \"{result.SavedState.Title}\" men \"{result.LoadedTitle}\" är laddat — position/bränsle kanske inte passar.");
         if (!result.AtcIdSet)
             Console.WriteLine("  Obs: ATC ID kunde inte sättas på detta plan.");
         Console.WriteLine($"  Laddade {chosen.Registration}.");
