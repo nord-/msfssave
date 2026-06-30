@@ -764,14 +764,14 @@ git commit -m "Lägg till AppService och testdubbel"
 
 - [ ] **Step 1: Lägg till SimConnect-referens i csproj**
 
-Lägg till i `MsfsSave/MsfsSave.csproj` (inuti ny `<ItemGroup>`). Vi pekar på de befintliga DLL:erna i `C:\Spel\UniversalAnnouncer\` via en `SimConnectDir`-property (ändra bara på ett ställe om de flyttas). Den **managed** wrappern (`Microsoft.FlightSimulator.SimConnect.dll`) är byggreferensen; den **nativa** (`SimConnect.dll`) kopieras bredvid exe vid körning:
+Lägg till i `MsfsSave/MsfsSave.csproj` (inuti ny `<ItemGroup>`). Vi pekar på MSFS SDK:ts **officiella** DLL:er via miljövariabeln `MSFS_SDK` (= `C:\MSFS SDK\` på den här maskinen; daterade juni 2025 och garanterat aktuella). En `SimConnectDir`-property samlar pathen så den bara behöver ändras på ett ställe. Den **managed** wrappern (`Microsoft.FlightSimulator.SimConnect.dll`) är byggreferensen; den **nativa** (`SimConnect.dll`) kopieras bredvid exe vid körning:
 ```xml
   <PropertyGroup>
-    <SimConnectDir>C:\Spel\UniversalAnnouncer</SimConnectDir>
+    <SimConnectDir>$(MSFS_SDK)\SimConnect SDK\lib</SimConnectDir>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.FlightSimulator.SimConnect">
-      <HintPath>$(SimConnectDir)\Microsoft.FlightSimulator.SimConnect.dll</HintPath>
+      <HintPath>$(SimConnectDir)\managed\Microsoft.FlightSimulator.SimConnect.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>
@@ -782,7 +782,7 @@ Lägg till i `MsfsSave/MsfsSave.csproj` (inuti ny `<ItemGroup>`). Vi pekar på d
     </None>
   </ItemGroup>
 ```
-Obs: den managed wrappern på den här sökvägen kan vara en community-/äldre build. Skulle `SIMCONNECT_DATATYPE.INITPOSITION`, `STRING256` eller `STRING64` saknas vid bygget i Task 8, faller vi tillbaka på SDK:ts officiella DLL under `$(MSFS_SDK)\SimConnect SDK\lib\managed\` (miljövariabeln `MSFS_SDK` = `C:\MSFS SDK\` på den här maskinen).
+Fallback om SDK:t inte skulle vara installerat: sätt `SimConnectDir` till `C:\Spel\UniversalAnnouncer` (där finns båda DLL:erna, men en äldre build från april).
 
 - [ ] **Step 2: Implementera SimConnector**
 
