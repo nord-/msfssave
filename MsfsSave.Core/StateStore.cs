@@ -29,6 +29,29 @@ public class StateStore
 
     public bool Exists(string registration) => File.Exists(PathFor(registration));
 
+    public IReadOnlyList<AircraftState> List()
+    {
+        var list = new List<AircraftState>();
+        foreach (var file in Directory.EnumerateFiles(_dir, "*.json"))
+        {
+            try
+            {
+                var state = JsonSerializer.Deserialize<AircraftState>(File.ReadAllText(file));
+                if (state != null) list.Add(state);
+            }
+            catch (JsonException) { /* hoppa över korrupta filer */ }
+        }
+        return list.OrderBy(s => s.Registration, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public bool Delete(string registration)
+    {
+        var path = PathFor(registration);
+        if (!File.Exists(path)) return false;
+        File.Delete(path);
+        return true;
+    }
+
     private string PathFor(string registration) => Path.Combine(_dir, Sanitize(registration) + ".json");
 
     private static string Sanitize(string name)

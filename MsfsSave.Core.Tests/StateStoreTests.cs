@@ -72,4 +72,39 @@ public class StateStoreTests
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
+
+    [Fact]
+    public void List_returns_all_saved_sorted_by_registration()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new StateStore(dir);
+            store.Save(Sample("SE-XYZ"));
+            store.Save(Sample("SE-ABC"));
+
+            var all = store.List();
+
+            Assert.Equal(2, all.Count);
+            Assert.Equal("SE-ABC", all[0].Registration);
+            Assert.Equal("SE-XYZ", all[1].Registration);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Delete_removes_file_and_reports_result()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new StateStore(dir);
+            store.Save(Sample("SE-ABC"));
+
+            Assert.True(store.Delete("SE-ABC"));
+            Assert.Null(store.Load("SE-ABC"));
+            Assert.False(store.Delete("SE-ABC"));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
 }
