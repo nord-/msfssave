@@ -29,6 +29,7 @@ public class Menu
             var key = Console.ReadKey(intercept: true);
             Console.WriteLine();
 
+            var handled = true;
             try
             {
                 switch (key.Key)
@@ -38,12 +39,15 @@ public class Menu
                     case ConsoleKey.D3 or ConsoleKey.NumPad3: DoList(); break;
                     case ConsoleKey.D4 or ConsoleKey.NumPad4: DoDelete(); break;
                     case ConsoleKey.Escape: return;
+                    default: handled = false; break;
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"  Fel: {ex.Message}");
             }
+
+            if (!handled) { Console.Clear(); continue; }
 
             Console.WriteLine("\n  (tryck valfri tangent för att fortsätta)");
             Console.ReadKey(intercept: true);
