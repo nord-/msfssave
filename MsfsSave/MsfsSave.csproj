@@ -8,8 +8,22 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>msfssave</AssemblyName>
   </PropertyGroup>
+  <PropertyGroup>
+    <SimConnectDir>$(MSFS_SDK)\SimConnect SDK\lib</SimConnectDir>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\MsfsSave.Core\MsfsSave.Core.csproj" />
   </ItemGroup>
-  <!-- SimConnect-referens läggs till i Task 8 -->
+  <ItemGroup>
+    <Reference Include="Microsoft.FlightSimulator.SimConnect">
+      <HintPath>$(SimConnectDir)\managed\Microsoft.FlightSimulator.SimConnect.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Native SimConnect.dll måste ligga bredvid exe vid körning -->
+    <None Include="$(SimConnectDir)\SimConnect.dll" Condition="Exists('$(SimConnectDir)\SimConnect.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
