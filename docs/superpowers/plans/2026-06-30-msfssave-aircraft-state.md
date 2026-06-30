@@ -6,13 +6,13 @@
 
 **Architecture:** Tre projekt. `MsfsSave.Core` (klassbibliotek) innehåller datamodell, JSON-persistens, ren logik och `ISimConnector`-gränssnittet — helt enhetstestbart utan simulator. `MsfsSave` (konsoll-exe) innehåller `SimConnector` (Managed SimConnect), `Menu` och `Program`. `MsfsSave.Core.Tests` (xUnit) testar Core utan att MSFS SDK behöver finnas. SimConnect-anslutningen öppnas en gång och återanvänds; positionsåterställning sker atomiskt via `SIMCONNECT_DATA_INITPOSITION` med fart 0.
 
-**Tech Stack:** .NET 8, C#, xUnit, System.Text.Json, Managed SimConnect (`Microsoft.FlightSimulator.SimConnect.dll` från MSFS SDK).
+**Tech Stack:** .NET 10, C#, xUnit, System.Text.Json, Managed SimConnect (`Microsoft.FlightSimulator.SimConnect.dll` från MSFS SDK).
 
 ---
 
 ## File Structure
 
-**`MsfsSave.Core/` (net8.0, ingen SimConnect-referens — testbar):**
+**`MsfsSave.Core/` (net10.0, ingen SimConnect-referens — testbar):**
 - `Models.cs` — `AircraftState`, `PositionState`, `PayloadStation` (records → JSON)
 - `StateStore.cs` — läs/skriv/lista/ta bort JSON-filer per registrering i `%APPDATA%\msfssave`
 - `FuelMath.cs` — ren `ClampToCapacity`-hjälpare
@@ -20,13 +20,13 @@
 - `ISimConnector.cs` — gränssnitt mot simulatorn + `RestoreReport`
 - `AppService.cs` — orkestrerar Save/Load/List/Delete ovanpå `ISimConnector` + `StateStore`
 
-**`MsfsSave/` (net8.0-windows, x64 — refererar Core + SimConnect-DLL):**
+**`MsfsSave/` (net10.0-windows, x64 — refererar Core + SimConnect-DLL):**
 - `SimConnector.cs` — konkret `ISimConnector` ovanpå Managed SimConnect
 - `Menu.cs` — meny-loop, Console-I/O, anropar `AppService`
 - `Program.cs` — wiring (DefaultDirectory, SimConnector, AppService, Menu)
 - `MsfsSave.csproj`
 
-**`MsfsSave.Core.Tests/` (net8.0 — refererar Core):**
+**`MsfsSave.Core.Tests/` (net10.0 — refererar Core):**
 - `FakeSimConnector.cs` — testdubbel för `ISimConnector`
 - `StateStoreTests.cs`, `FuelMathTests.cs`, `StateComparisonTests.cs`, `AppServiceTests.cs`
 
@@ -48,9 +48,9 @@ Run:
 ```bash
 cd "C:/Users/ricka/Projects/msfssave"
 dotnet new sln -n MsfsSave
-dotnet new classlib -n MsfsSave.Core -f net8.0 -o MsfsSave.Core
-dotnet new console  -n MsfsSave      -f net8.0 -o MsfsSave
-dotnet new xunit    -n MsfsSave.Core.Tests -f net8.0 -o MsfsSave.Core.Tests
+dotnet new classlib -n MsfsSave.Core -f net10.0 -o MsfsSave.Core
+dotnet new console  -n MsfsSave      -f net10.0 -o MsfsSave
+dotnet new xunit    -n MsfsSave.Core.Tests -f net10.0 -o MsfsSave.Core.Tests
 rm MsfsSave.Core/Class1.cs MsfsSave.Core.Tests/UnitTest1.cs
 dotnet sln add MsfsSave.Core MsfsSave MsfsSave.Core.Tests
 dotnet add MsfsSave reference MsfsSave.Core
@@ -64,7 +64,7 @@ Replace `MsfsSave/MsfsSave.csproj` with:
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <Nullable>enable</Nullable>
