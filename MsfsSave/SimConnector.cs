@@ -339,9 +339,16 @@ public sealed class SimConnector : ISimConnector
         foreach (var st in state.PayloadLbs)
         {
             if (st.Index < 1) continue;
-            DefineStationWeight(st.Index);
-            _sc!.SetDataOnSimObject(DEFINITIONS.PayloadStation, SimConnect.SIMCONNECT_OBJECT_ID_USER,
-                SIMCONNECT_DATA_SET_FLAG.DEFAULT, new WeightData { weight = st.Weight });
+            try
+            {
+                DefineStationWeight(st.Index);
+                _sc!.SetDataOnSimObject(DEFINITIONS.PayloadStation, SimConnect.SIMCONNECT_OBJECT_ID_USER,
+                    SIMCONNECT_DATA_SET_FLAG.DEFAULT, new WeightData { weight = st.Weight });
+            }
+            catch
+            {
+                // Best-effort: hoppa över stationer som inte finns i det laddade planet.
+            }
         }
     }
 
