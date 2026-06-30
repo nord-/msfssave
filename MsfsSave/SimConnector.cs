@@ -10,8 +10,8 @@ public sealed class SimConnector : ISimConnector
     private const int WM_USER_SIMCONNECT = 0x0402;
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(5);
 
-    private enum DEFINITIONS { Aircraft, Fuel, InitPosition, AtcId }
-    private enum REQUESTS { Aircraft, Fuel }
+    private enum DEFINITIONS { Aircraft, Fuel, InitPosition, AtcId, PayloadCount, PayloadStation }
+    private enum REQUESTS { Aircraft, Fuel, PayloadCount, PayloadStation }
 
     // Ordningen MÅSTE matcha AddToDataDefinition-anropen nedan.
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
@@ -41,6 +41,12 @@ public sealed class SimConnector : ISimConnector
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string atcId;
     }
 
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct CountData { public double count; }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct WeightData { public double weight; }
+
     private static readonly (string Key, string Var)[] FuelTanks =
     {
         ("Center", "FUEL TANK CENTER QUANTITY"),
@@ -62,6 +68,8 @@ public sealed class SimConnector : ISimConnector
     private SimConnect? _sc;
     private AircraftData? _lastAircraft;
     private FuelData? _lastFuel;
+    private CountData? _lastCount;
+    private WeightData? _lastWeight;
     private bool _received;
     private REQUESTS? _awaiting;
 
@@ -80,6 +88,7 @@ public sealed class SimConnector : ISimConnector
         DefineFuel();
         DefineInitPosition();
         DefineAtcId();
+        DefinePayloadCount();
 
         // Initial avläsning för header (icke-kritisk — kan misslyckas om inget plan är laddat än).
         try
@@ -129,6 +138,12 @@ public sealed class SimConnector : ISimConnector
         _sc.RegisterDataDefineStruct<AtcIdData>(DEFINITIONS.AtcId);
     }
 
+    private void DefinePayloadCount()
+    {
+        _sc!.AddToDataDefinition(DEFINITIONS.PayloadCount, "PAYLOAD STATION COUNT", "number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        _sc.RegisterDataDefineStruct<CountData>(DEFINITIONS.PayloadCount);
+    }
+
     private void OnRecvData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
     {
         var req = (REQUESTS)data.dwRequestID;
@@ -136,6 +151,8 @@ public sealed class SimConnector : ISimConnector
         {
             case REQUESTS.Aircraft: _lastAircraft = (AircraftData)data.dwData[0]; break;
             case REQUESTS.Fuel: _lastFuel = (FuelData)data.dwData[0]; break;
+            case REQUESTS.PayloadCount: _lastCount = (CountData)data.dwData[0]; break;
+            case REQUESTS.PayloadStation: _lastWeight = (WeightData)data.dwData[0]; break;
         }
         if (_awaiting == req) _received = true;
     }
@@ -211,25 +228,38 @@ public sealed class SimConnector : ISimConnector
 
     private List<PayloadStation> CapturePayload()
     {
-        // Payload läses station för station via egna definitioner (antal okänt vid kompilering).
         var result = new List<PayloadStation>();
-        for (var i = 1; i <= MaxPayloadStations; i++)
-        {
-            var weight = ReadSinglePayloadWeight(i);
-            if (weight is null) break; // station saknas -> klart
-            result.Add(new PayloadStation { Index = i, Name = $"Station {i}", Weight = weight.Value });
-        }
+        var count = ReadPayloadStationCount();
+        for (var i = 1; i <= count; i++)
+            result.Add(new PayloadStation { Index = i, Name = $"Station {i}", Weight = ReadPayloadStationWeight(i) });
         return result;
     }
 
-    private double? ReadSinglePayloadWeight(int index)
+    private int ReadPayloadStationCount()
     {
-        // Definierar och läser PAYLOAD STATION WEIGHT:index ad hoc.
-        const DEFINITIONS def = DEFINITIONS.AtcId; // återanvänd ej; se kommentar i Task 10
-        // Implementeras tillsammans med verifieringen i Task 10 (kräver sim).
-        _ = def; // suppress unused warning
-        _ = index;
-        return null;
+        _lastCount = null;
+        _sc!.RequestDataOnSimObject(REQUESTS.PayloadCount, DEFINITIONS.PayloadCount, SimConnect.SIMCONNECT_OBJECT_ID_USER,
+            SIMCONNECT_PERIOD.ONCE, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0, 0, 0);
+        PumpUntilReceived(REQUESTS.PayloadCount);
+        var c = (int)Math.Round((_lastCount ?? throw new InvalidOperationException("Fick ingen payload-räkning från simulatorn.")).count);
+        return Math.Clamp(c, 0, MaxPayloadStations);
+    }
+
+    private double ReadPayloadStationWeight(int index)
+    {
+        DefineStationWeight(index);
+        _lastWeight = null;
+        _sc!.RequestDataOnSimObject(REQUESTS.PayloadStation, DEFINITIONS.PayloadStation, SimConnect.SIMCONNECT_OBJECT_ID_USER,
+            SIMCONNECT_PERIOD.ONCE, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0, 0, 0);
+        PumpUntilReceived(REQUESTS.PayloadStation);
+        return (_lastWeight ?? throw new InvalidOperationException($"Fick ingen vikt för station {index}.")).weight;
+    }
+
+    private void DefineStationWeight(int index)
+    {
+        _sc!.ClearDataDefinition(DEFINITIONS.PayloadStation);
+        _sc.AddToDataDefinition(DEFINITIONS.PayloadStation, $"PAYLOAD STATION WEIGHT:{index}", "pounds", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        _sc.RegisterDataDefineStruct<WeightData>(DEFINITIONS.PayloadStation);
     }
 
     public RestoreReport Restore(AircraftState state)
@@ -254,7 +284,8 @@ public sealed class SimConnector : ISimConnector
         // 2. Bränsle per tank, klampat mot kapacitet (kapaciteter från senaste Capture om tillgängliga).
         RestoreFuel(state);
 
-        // 3. Payload per station (implementeras i Task 10 tillsammans med avläsningen).
+        // 3. Payload per station.
+        RestorePayload(state);
 
         // 4. ATC ID best effort.
         var atcSet = TrySetAtcId(state.Registration);
@@ -301,6 +332,17 @@ public sealed class SimConnector : ISimConnector
         };
         _sc.SetDataOnSimObject(DEFINITIONS.Fuel, SimConnect.SIMCONNECT_OBJECT_ID_USER,
             SIMCONNECT_DATA_SET_FLAG.DEFAULT, toSet);
+    }
+
+    private void RestorePayload(AircraftState state)
+    {
+        foreach (var st in state.PayloadLbs)
+        {
+            if (st.Index < 1) continue;
+            DefineStationWeight(st.Index);
+            _sc!.SetDataOnSimObject(DEFINITIONS.PayloadStation, SimConnect.SIMCONNECT_OBJECT_ID_USER,
+                SIMCONNECT_DATA_SET_FLAG.DEFAULT, new WeightData { weight = st.Weight });
+        }
     }
 
     private bool TrySetAtcId(string registration)
