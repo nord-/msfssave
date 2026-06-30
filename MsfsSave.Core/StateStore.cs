@@ -22,7 +22,9 @@ public class StateStore
     public AircraftState? Load(string registration)
     {
         var path = PathFor(registration);
-        return File.Exists(path) ? JsonSerializer.Deserialize<AircraftState>(File.ReadAllText(path)) : null;
+        if (!File.Exists(path)) return null;
+        return JsonSerializer.Deserialize<AircraftState>(File.ReadAllText(path))
+            ?? throw new InvalidDataException($"Sparfilen för '{registration}' är tom eller ogiltig.");
     }
 
     public bool Exists(string registration) => File.Exists(PathFor(registration));

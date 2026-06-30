@@ -54,7 +54,21 @@ public class StateStoreTests
         try
         {
             var store = new StateStore(dir);
-            Assert.Null(store.Load("OKAND"));
+            Assert.Null(store.Load("OKÄND"));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Exists_is_false_before_save_and_true_after()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new StateStore(dir);
+            Assert.False(store.Exists("SE-ABC"));
+            store.Save(Sample("SE-ABC"));
+            Assert.True(store.Exists("SE-ABC"));
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
