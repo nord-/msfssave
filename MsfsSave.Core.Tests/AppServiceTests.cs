@@ -109,4 +109,75 @@ public class AppServiceTests
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
+
+    [Fact]
+    public void Save_throws_and_leaves_sim_untouched_when_not_ready()
+    {
+        var dir = TempDir();
+        try
+        {
+            var sim = new FakeSimConnector { NextReadiness = new SimReadiness(true, true, false) };
+            var app = new AppService(sim, new StateStore(dir));
+
+            var ex = Assert.Throws<SimNotReadyException>((Action)(() => app.Save("SE-ABC")));
+
+            Assert.Equal("motorerna är igång", ex.Reason);
+            Assert.Equal(0, sim.CaptureCalls);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Save_writes_nothing_to_disk_when_not_ready()
+    {
+        var dir = TempDir();
+        try
+        {
+            var sim = new FakeSimConnector { NextReadiness = new SimReadiness(false, true, true) };
+            var store = new StateStore(dir);
+            var app = new AppService(sim, store);
+
+            Assert.Throws<SimNotReadyException>((Action)(() => app.Save("SE-ABC")));
+
+            Assert.Null(store.Load("SE-ABC"));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Load_throws_and_leaves_sim_untouched_when_not_ready()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new StateStore(dir);
+            store.Save(new AircraftState { Registration = "SE-ABC", Title = "Cessna 172 Skyhawk" });
+            var sim = new FakeSimConnector { NextReadiness = new SimReadiness(true, false, true) };
+            var app = new AppService(sim, store);
+
+            var ex = Assert.Throws<SimNotReadyException>((Action)(() => app.Load("SE-ABC")));
+
+            Assert.Equal("planet rör sig", ex.Reason);
+            Assert.Equal(0, sim.RestoreCalls);
+            Assert.Null(sim.Restored);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void List_and_Delete_work_when_not_ready()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new StateStore(dir);
+            store.Save(new AircraftState { Registration = "SE-ABC" });
+            var sim = new FakeSimConnector { NextReadiness = new SimReadiness(false, false, false) };
+            var app = new AppService(sim, store);
+
+            Assert.Single(app.List());
+            Assert.True(app.Delete("SE-ABC"));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
 }

@@ -10,8 +10,8 @@ public sealed class SimConnector : ISimConnector
     private const int WM_USER_SIMCONNECT = 0x0402;
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(5);
 
-    private enum DEFINITIONS { Aircraft, Fuel, InitPosition, AtcId, PayloadCount, PayloadStation, FuelWrite }
-    private enum REQUESTS { Aircraft, Fuel, PayloadCount, PayloadStation }
+    private enum DEFINITIONS { Aircraft, Fuel, InitPosition, AtcId, PayloadCount, PayloadStation, FuelWrite, Readiness }
+    private enum REQUESTS { Aircraft, Fuel, PayloadCount, PayloadStation, Readiness }
 
     // Ordningen MÅSTE matcha AddToDataDefinition-anropen nedan.
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
@@ -56,6 +56,15 @@ public sealed class SimConnector : ISimConnector
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     private struct WeightData { public double weight; }
 
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct ReadinessData
+    {
+        public double onGround;
+        public double groundVelocity;
+        public double engineCount;
+        public double combustion1, combustion2, combustion3, combustion4;
+    }
+
     private static readonly (string Key, string Var)[] FuelTanks =
     {
         ("Center", "FUEL TANK CENTER QUANTITY"),
@@ -72,6 +81,8 @@ public sealed class SimConnector : ISimConnector
     };
 
     private const int MaxPayloadStations = 20;
+    private const int MaxEngines = 4;
+    private const double StationaryKnots = 1.0;
 
     private readonly EventWaitHandle _event = new(false, EventResetMode.AutoReset);
     private SimConnect? _sc;
@@ -79,6 +90,7 @@ public sealed class SimConnector : ISimConnector
     private FuelData? _lastFuel;
     private CountData? _lastCount;
     private WeightData? _lastWeight;
+    private ReadinessData? _lastReadiness;
     private bool _received;
     private REQUESTS? _awaiting;
 
@@ -99,6 +111,7 @@ public sealed class SimConnector : ISimConnector
         DefineInitPosition();
         DefineAtcId();
         DefinePayloadCount();
+        DefineReadiness();
 
         // Initial avläsning för header (icke-kritisk — kan misslyckas om inget plan är laddat än).
         try
@@ -161,6 +174,16 @@ public sealed class SimConnector : ISimConnector
         _sc.RegisterDataDefineStruct<CountData>(DEFINITIONS.PayloadCount);
     }
 
+    private void DefineReadiness()
+    {
+        _sc!.AddToDataDefinition(DEFINITIONS.Readiness, "SIM ON GROUND", "bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        _sc.AddToDataDefinition(DEFINITIONS.Readiness, "GROUND VELOCITY", "knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        _sc.AddToDataDefinition(DEFINITIONS.Readiness, "NUMBER OF ENGINES", "number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        for (var i = 1; i <= MaxEngines; i++)
+            _sc.AddToDataDefinition(DEFINITIONS.Readiness, $"GENERAL ENG COMBUSTION:{i}", "bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        _sc.RegisterDataDefineStruct<ReadinessData>(DEFINITIONS.Readiness);
+    }
+
     private void OnRecvData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
     {
         var req = (REQUESTS)data.dwRequestID;
@@ -170,6 +193,7 @@ public sealed class SimConnector : ISimConnector
             case REQUESTS.Fuel: _lastFuel = (FuelData)data.dwData[0]; break;
             case REQUESTS.PayloadCount: _lastCount = (CountData)data.dwData[0]; break;
             case REQUESTS.PayloadStation: _lastWeight = (WeightData)data.dwData[0]; break;
+            case REQUESTS.Readiness: _lastReadiness = (ReadinessData)data.dwData[0]; break;
         }
         if (_awaiting == req) _received = true;
     }
@@ -241,6 +265,28 @@ public sealed class SimConnector : ISimConnector
             FuelGallons = fuelDict,
             PayloadLbs = CapturePayload()
         };
+    }
+
+    public SimReadiness ReadReadiness()
+    {
+        if (_sc == null) throw new InvalidOperationException("Inte ansluten till simulatorn.");
+
+        _lastReadiness = null;
+        _sc.RequestDataOnSimObject(REQUESTS.Readiness, DEFINITIONS.Readiness, SimConnect.SIMCONNECT_OBJECT_ID_USER,
+            SIMCONNECT_PERIOD.ONCE, SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT, 0, 0, 0);
+        PumpUntilReceived(REQUESTS.Readiness);
+        var data = _lastReadiness ?? throw new InvalidOperationException("Fick inget tillståndssvar från simulatorn.");
+
+        var engines = Math.Clamp((int)Math.Round(data.engineCount), 0, MaxEngines);
+        var combustion = new[] { data.combustion1, data.combustion2, data.combustion3, data.combustion4 };
+        var enginesOff = true;
+        for (var i = 0; i < engines; i++)
+            if (combustion[i] > 0.5) enginesOff = false;
+
+        return new SimReadiness(
+            OnGround: data.onGround > 0.5,
+            Stationary: Math.Abs(data.groundVelocity) < StationaryKnots,
+            EnginesOff: enginesOff);
     }
 
     private List<PayloadStation> CapturePayload()

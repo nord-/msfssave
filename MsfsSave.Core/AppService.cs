@@ -17,6 +17,7 @@ public class AppService
 
     public SaveResult Save(string registration)
     {
+        RequireReady();
         var captured = _sim.Capture();
         var state = captured with { Registration = registration, SavedAtUtc = DateTime.UtcNow };
         var existed = _store.Exists(registration);
@@ -26,6 +27,7 @@ public class AppService
 
     public LoadResult Load(string registration)
     {
+        RequireReady();
         var state = _store.Load(registration)
             ?? throw new FileNotFoundException($"Inget sparat tillstånd för '{registration}'.");
         var report = _sim.Restore(state);
@@ -36,4 +38,11 @@ public class AppService
     public IReadOnlyList<AircraftState> List() => _store.List();
 
     public bool Delete(string registration) => _store.Delete(registration);
+
+    /// <summary>Vägrar all dataöverföring om planet inte står stilla på marken med motorerna av.</summary>
+    private void RequireReady()
+    {
+        var readiness = _sim.ReadReadiness();
+        if (!readiness.CanTransfer) throw new SimNotReadyException(readiness.BlockReason!);
+    }
 }
