@@ -17,17 +17,17 @@ public class StateStore
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "msfssave");
 
     public void Save(AircraftState state)
-        => File.WriteAllText(PathFor(state.Registration), JsonSerializer.Serialize(state, Options));
+        => File.WriteAllText(PathFor(state.SlotName), JsonSerializer.Serialize(state, Options));
 
-    public AircraftState? Load(string registration)
+    public AircraftState? Load(string slotName)
     {
-        var path = PathFor(registration);
+        var path = PathFor(slotName);
         if (!File.Exists(path)) return null;
         return JsonSerializer.Deserialize<AircraftState>(File.ReadAllText(path))
-            ?? throw new InvalidDataException($"Sparfilen för '{registration}' är tom eller ogiltig.");
+            ?? throw new InvalidDataException($"Sparfilen för '{slotName}' är tom eller ogiltig.");
     }
 
-    public bool Exists(string registration) => File.Exists(PathFor(registration));
+    public bool Exists(string slotName) => File.Exists(PathFor(slotName));
 
     public IReadOnlyList<AircraftState> List()
     {
@@ -41,18 +41,18 @@ public class StateStore
             }
             catch (JsonException) { /* hoppa över korrupta filer */ }
         }
-        return list.OrderBy(s => s.Registration, StringComparer.OrdinalIgnoreCase).ToList();
+        return list.OrderBy(s => s.SlotName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    public bool Delete(string registration)
+    public bool Delete(string slotName)
     {
-        var path = PathFor(registration);
+        var path = PathFor(slotName);
         if (!File.Exists(path)) return false;
         File.Delete(path);
         return true;
     }
 
-    private string PathFor(string registration) => Path.Combine(_dir, Sanitize(registration) + ".json");
+    private string PathFor(string slotName) => Path.Combine(_dir, Sanitize(slotName) + ".json");
 
     private static string Sanitize(string name)
     {

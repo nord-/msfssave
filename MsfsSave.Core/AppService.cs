@@ -15,21 +15,21 @@ public class AppService
         _store = store;
     }
 
-    public SaveResult Save(string registration)
+    public SaveResult Save(string slotName)
     {
         RequireReady();
         var captured = _sim.Capture();
-        var state = captured with { Registration = registration, SavedAtUtc = DateTime.UtcNow };
-        var existed = _store.Exists(registration);
+        var state = captured with { SlotName = slotName, SavedAtUtc = DateTime.UtcNow };
+        var existed = _store.Exists(slotName);
         _store.Save(state);
         return new SaveResult(state, existed);
     }
 
-    public LoadResult Load(string registration)
+    public LoadResult Load(string slotName)
     {
         RequireReady();
-        var state = _store.Load(registration)
-            ?? throw new FileNotFoundException($"Inget sparat tillstånd för '{registration}'.");
+        var state = _store.Load(slotName)
+            ?? throw new FileNotFoundException($"Inget sparat tillstånd för '{slotName}'.");
         var report = _sim.Restore(state);
         var mismatch = !StateComparison.TitleMatches(state.Title, report.LoadedTitle);
         return new LoadResult(state, mismatch, report.LoadedTitle, report.AtcIdSet);
@@ -37,7 +37,7 @@ public class AppService
 
     public IReadOnlyList<AircraftState> List() => _store.List();
 
-    public bool Delete(string registration) => _store.Delete(registration);
+    public bool Delete(string slotName) => _store.Delete(slotName);
 
     /// <summary>Vägrar all dataöverföring om planet inte står stilla på marken med motorerna av.</summary>
     private void RequireReady()

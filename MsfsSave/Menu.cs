@@ -43,6 +43,7 @@ public class Menu
                 case ConsoleKey.DownArrow: _list.MoveDown(); break;
                 case ConsoleKey.Enter: DoLoad(); break;
                 case ConsoleKey.F2: DoSave(); break;
+                case ConsoleKey.F5: DoQuickSave(); break;
                 case ConsoleKey.Delete: DoDelete(); break;
                 case ConsoleKey.R when key.Modifiers == ConsoleModifiers.None: break;
                 default: handled = false; break;
@@ -55,7 +56,7 @@ public class Menu
     private static bool IsActionKey(ConsoleKeyInfo key) => key.Key switch
     {
         ConsoleKey.Enter => true,
-        ConsoleKey.F2 or ConsoleKey.Delete => true,
+        ConsoleKey.F2 or ConsoleKey.F5 or ConsoleKey.Delete => true,
         ConsoleKey.R when key.Modifiers == ConsoleModifiers.None => true,
         _ => false
     };
@@ -70,7 +71,7 @@ public class Menu
         try
         {
             Draw(StatusText.WritingToSim);
-            var result = _app.Load(chosen.Registration);
+            var result = _app.Load(chosen.SlotName);
             _status = StatusText.Loaded(result);
         }
         catch (SimNotReadyException ex) { _status = StatusText.Blocked("ladda", ex.Reason); }
@@ -89,18 +90,43 @@ public class Menu
         }
 
         var suggestion = (_sim.CurrentAtcId ?? "").Trim();
-        var input = Prompt($"Registrering [{suggestion}]: ");
+        var input = Prompt($"Namn på sparplats [{suggestion}]: ");
         if (input is null) { _status = ""; return; }
 
-        var registration = string.IsNullOrWhiteSpace(input) ? suggestion : input.Trim();
-        if (string.IsNullOrWhiteSpace(registration)) { _status = StatusText.NoRegistration; return; }
+        var slotName = string.IsNullOrWhiteSpace(input) ? suggestion : input.Trim();
+        if (string.IsNullOrWhiteSpace(slotName)) { _status = StatusText.NoSlotName; return; }
 
         try
         {
             Draw(StatusText.ReadingFromSim);
-            var result = _app.Save(registration);
+            var result = _app.Save(slotName);
             RefreshList();
-            _list.SelectByRegistration(registration);
+            _list.SelectBySlotName(slotName);
+            _status = StatusText.Saved(result);
+        }
+        catch (SimNotReadyException ex) { _status = StatusText.Blocked("spara", ex.Reason); }
+        catch (Exception ex) { _status = StatusText.Error(ex.Message); }
+        finally { FlushKeys(); }
+    }
+
+    private void DoQuickSave()
+    {
+        var chosen = _list.Selected;
+        if (chosen is null) return;
+
+        // Samma spärr som DoSave — RefreshReadiness har redan körts för det här tangenttrycket.
+        if (_readiness is null || !_readiness.CanTransfer)
+        {
+            _status = StatusText.Blocked("spara", _readiness?.BlockReason ?? "simulatorns tillstånd är okänt");
+            return;
+        }
+
+        try
+        {
+            Draw(StatusText.ReadingFromSim);
+            var result = _app.Save(chosen.SlotName);
+            RefreshList();
+            _list.SelectBySlotName(chosen.SlotName);
             _status = StatusText.Saved(result);
         }
         catch (SimNotReadyException ex) { _status = StatusText.Blocked("spara", ex.Reason); }
@@ -115,9 +141,9 @@ public class Menu
 
         try
         {
-            var existed = _app.Delete(chosen.Registration);
+            var existed = _app.Delete(chosen.SlotName);
             RefreshList();
-            _status = StatusText.Deleted(chosen.Registration, existed);
+            _status = StatusText.Deleted(chosen.SlotName, existed);
         }
         catch (Exception ex) { _status = StatusText.Error(ex.Message); }
     }
@@ -181,14 +207,15 @@ public class Menu
         }
         else
         {
-            WriteRow($"   {"Reg",-RegWidth} {"Sparad",-StampWidth}   Flygplan");
+            WriteRow($"   {"Namn",-NameWidth} {"Reg",-RegWidth} {"Sparad",-StampWidth}   Flygplan");
             for (var i = 0; i < _list.Count; i++)
             {
                 var s = _list.Items[i];
                 var marker = i == _list.SelectedIndex ? " ›" : "  ";
                 var stamp = s.SavedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
                 var title = TextFormat.Truncate(s.Title, TitleWidth);
-                WriteRow($"{marker} {s.Registration,-RegWidth} {stamp,-StampWidth}   {title}");
+                var reg = TextFormat.Truncate(s.AtcId, RegWidth);
+                WriteRow($"{marker} {s.SlotName,-NameWidth} {reg,-RegWidth} {stamp,-StampWidth}   {title}");
             }
         }
 
@@ -199,11 +226,12 @@ public class Menu
         WriteRow(" " + status);
     }
 
-    private const int RegWidth = 12;
+    private const int NameWidth = 12;
+    private const int RegWidth = 9;
     private const int StampWidth = 16;
 
     /// <summary>Det som blir över till flygplansnamnet när övriga kolumner tagit sitt.</summary>
-    private static int TitleWidth => Math.Max(8, Width - (3 + RegWidth + 1 + StampWidth + 3));
+    private static int TitleWidth => Math.Max(8, Width - (3 + NameWidth + 1 + RegWidth + 1 + StampWidth + 3));
 
     private (string Key, string Label)[] KeyRow(bool locked)
     {
@@ -211,6 +239,7 @@ public class Menu
         if (_list.Count > 0) keys.Add(("↑↓", "välj"));
         if (_list.Count > 0 && !locked) keys.Add(("Enter", "ladda"));
         if (!locked) keys.Add(("F2", "spara"));
+        if (_list.Count > 0 && !locked) keys.Add(("F5", "skriv över"));
         if (_list.Count > 0) keys.Add(("Delete", "ta bort"));
         keys.Add(("R", "uppdatera"));
         keys.Add(("ESC", "avsluta"));

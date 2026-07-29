@@ -118,7 +118,7 @@ public sealed class SimConnector : ISimConnector
         {
             var snapshot = Capture();
             CurrentTitle = snapshot.Title;
-            CurrentAtcId = snapshot.Registration;
+            CurrentAtcId = snapshot.AtcId;
         }
         catch
         {
@@ -249,7 +249,7 @@ public sealed class SimConnector : ISimConnector
 
         return new AircraftState
         {
-            Registration = ac.atcId ?? "",
+            AtcId = ac.atcId ?? "",
             Title = ac.title ?? "",
             SavedAtUtc = DateTime.UtcNow,
             Position = new PositionState
@@ -350,8 +350,8 @@ public sealed class SimConnector : ISimConnector
         // 3. Payload per station.
         RestorePayload(state);
 
-        // 4. ATC ID best effort.
-        var atcSet = TrySetAtcId(state.Registration);
+        // 4. ATC ID best effort — flygplanets faktiska registrering, inte sparplatsens namn.
+        var atcSet = TrySetAtcId(state.AtcId);
 
         // Läs aktuell titel för matchningskontroll.
         var loadedTitle = SafeReadTitle();
@@ -410,11 +410,11 @@ public sealed class SimConnector : ISimConnector
         }
     }
 
-    private bool TrySetAtcId(string registration)
+    private bool TrySetAtcId(string atcId)
     {
         try
         {
-            var data = new AtcIdData { atcId = registration ?? "" };
+            var data = new AtcIdData { atcId = atcId ?? "" };
             _sc!.SetDataOnSimObject(DEFINITIONS.AtcId, SimConnect.SIMCONNECT_OBJECT_ID_USER,
                 SIMCONNECT_DATA_SET_FLAG.DEFAULT, data);
             return true;
