@@ -14,6 +14,9 @@ public interface ISimConnector : IDisposable
     /// <summary>Öppnar anslutningen. Kastar vid fel (t.ex. simulatorn inte igång).</summary>
     void Connect();
 
+    /// <summary>Läser om planet står stilla på marken med motorerna av.</summary>
+    SimReadiness ReadReadiness();
+
     /// <summary>Läser nuvarande fullständiga tillstånd från simulatorn.</summary>
     AircraftState Capture();
 

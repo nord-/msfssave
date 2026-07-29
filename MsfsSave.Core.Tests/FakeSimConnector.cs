@@ -12,8 +12,15 @@ public class FakeSimConnector : ISimConnector
     public AircraftState? Restored { get; private set; }
     public RestoreReport NextReport { get; set; } = new() { AtcIdSet = true, LoadedTitle = "Cessna 172 Skyhawk" };
 
+    /// <summary>Standard är ett plan som står stilla på marken med motorerna av.</summary>
+    public SimReadiness NextReadiness { get; set; } = new(true, true, true);
+
+    public int CaptureCalls { get; private set; }
+    public int RestoreCalls { get; private set; }
+
     public void Connect() { IsConnected = true; }
-    public AircraftState Capture() => NextCapture;
-    public RestoreReport Restore(AircraftState state) { Restored = state; return NextReport; }
+    public SimReadiness ReadReadiness() => NextReadiness;
+    public AircraftState Capture() { CaptureCalls++; return NextCapture; }
+    public RestoreReport Restore(AircraftState state) { RestoreCalls++; Restored = state; return NextReport; }
     public void Dispose() { }
 }
