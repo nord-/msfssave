@@ -7,9 +7,10 @@ public class StateStoreTests
     private static string TempDir() =>
         Path.Combine(Path.GetTempPath(), "msfssave_test_" + Guid.NewGuid().ToString("N"));
 
-    private static AircraftState Sample(string reg) => new()
+    private static AircraftState Sample(string name) => new()
     {
-        Registration = reg,
+        SlotName = name,
+        AtcId = "SE-ABC",
         Title = "Cessna 172 Skyhawk",
         SavedAtUtc = new DateTime(2026, 6, 30, 18, 30, 0, DateTimeKind.Utc),
         Position = new PositionState
@@ -34,7 +35,7 @@ public class StateStoreTests
             var loaded = store.Load("SE-ABC");
 
             Assert.NotNull(loaded);
-            Assert.Equal(original.Registration, loaded!.Registration);
+            Assert.Equal(original.SlotName, loaded!.SlotName);
             Assert.Equal(original.Title, loaded.Title);
             Assert.Equal(original.SavedAtUtc, loaded.SavedAtUtc);
             Assert.Equal(original.Position.Latitude, loaded.Position.Latitude);
@@ -86,8 +87,8 @@ public class StateStoreTests
             var all = store.List();
 
             Assert.Equal(2, all.Count);
-            Assert.Equal("SE-ABC", all[0].Registration);
-            Assert.Equal("SE-XYZ", all[1].Registration);
+            Assert.Equal("SE-ABC", all[0].SlotName);
+            Assert.Equal("SE-XYZ", all[1].SlotName);
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }

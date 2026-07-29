@@ -8,7 +8,7 @@ public class AppServiceTests
         Path.Combine(Path.GetTempPath(), "msfssave_app_" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void Save_captures_from_sim_and_stamps_registration_and_time()
+    public void Save_captures_from_sim_and_stamps_slot_name_and_time()
     {
         var dir = TempDir();
         try
@@ -17,6 +17,7 @@ public class AppServiceTests
             {
                 NextCapture = new AircraftState
                 {
+                    AtcId = "SE-REAL",
                     Title = "Cessna 172 Skyhawk",
                     Position = new PositionState { Latitude = 1, Longitude = 2 }
                 }
@@ -24,12 +25,13 @@ public class AppServiceTests
             var store = new StateStore(dir);
             var app = new AppService(sim, store);
 
-            var result = app.Save("SE-NEW");
+            var result = app.Save("Höganäs");
 
             Assert.False(result.Overwritten);
-            Assert.Equal("SE-NEW", result.State.Registration);
+            Assert.Equal("Höganäs", result.State.SlotName);
+            Assert.Equal("SE-REAL", result.State.AtcId);
             Assert.NotEqual(default, result.State.SavedAtUtc);
-            Assert.Equal("SE-NEW", store.Load("SE-NEW")!.Registration);
+            Assert.Equal("Höganäs", store.Load("Höganäs")!.SlotName);
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
@@ -58,7 +60,7 @@ public class AppServiceTests
         try
         {
             var store = new StateStore(dir);
-            store.Save(new AircraftState { Registration = "SE-ABC", Title = "Cessna 172 Skyhawk" });
+            store.Save(new AircraftState { SlotName = "SE-ABC", AtcId = "SE-ABC", Title = "Cessna 172 Skyhawk" });
             var sim = new FakeSimConnector
             {
                 NextReport = new RestoreReport { AtcIdSet = true, LoadedTitle = "Cessna 172 Skyhawk" }
@@ -68,9 +70,31 @@ public class AppServiceTests
             var result = app.Load("SE-ABC");
 
             Assert.NotNull(sim.Restored);
-            Assert.Equal("SE-ABC", sim.Restored!.Registration);
+            Assert.Equal("SE-ABC", sim.Restored!.AtcId);
             Assert.False(result.TitleMismatch);
             Assert.True(result.AtcIdSet);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Load_restores_real_atc_id_not_the_slot_name()
+    {
+        var dir = TempDir();
+        try
+        {
+            var store = new StateStore(dir);
+            store.Save(new AircraftState { SlotName = "Höganäs", AtcId = "SE-MAF", Title = "Cessna 172 Skyhawk" });
+            var sim = new FakeSimConnector
+            {
+                NextReport = new RestoreReport { AtcIdSet = true, LoadedTitle = "Cessna 172 Skyhawk" }
+            };
+            var app = new AppService(sim, store);
+
+            app.Load("Höganäs");
+
+            Assert.Equal("SE-MAF", sim.Restored!.AtcId);
+            Assert.NotEqual("Höganäs", sim.Restored!.AtcId);
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
@@ -82,7 +106,7 @@ public class AppServiceTests
         try
         {
             var store = new StateStore(dir);
-            store.Save(new AircraftState { Registration = "SE-ABC", Title = "Cessna 172 Skyhawk" });
+            store.Save(new AircraftState { SlotName = "SE-ABC", AtcId = "SE-ABC", Title = "Cessna 172 Skyhawk" });
             var sim = new FakeSimConnector
             {
                 NextReport = new RestoreReport { AtcIdSet = false, LoadedTitle = "Airbus A320neo" }
@@ -151,7 +175,7 @@ public class AppServiceTests
         try
         {
             var store = new StateStore(dir);
-            store.Save(new AircraftState { Registration = "SE-ABC", Title = "Cessna 172 Skyhawk" });
+            store.Save(new AircraftState { SlotName = "SE-ABC", AtcId = "SE-ABC", Title = "Cessna 172 Skyhawk" });
             var sim = new FakeSimConnector { NextReadiness = new SimReadiness(true, false, true) };
             var app = new AppService(sim, store);
 
@@ -171,7 +195,7 @@ public class AppServiceTests
         try
         {
             var store = new StateStore(dir);
-            store.Save(new AircraftState { Registration = "SE-ABC" });
+            store.Save(new AircraftState { SlotName = "SE-ABC", AtcId = "SE-ABC" });
             var sim = new FakeSimConnector { NextReadiness = new SimReadiness(false, false, false) };
             var app = new AppService(sim, store);
 

@@ -2,7 +2,10 @@ namespace MsfsSave.Core;
 
 public record AircraftState
 {
-    public string Registration { get; init; } = "";
+    /// <summary>Fritt namn på sparplatsen — filnamn i StateStore, valt av användaren. Inte flygplanets registrering.</summary>
+    public string SlotName { get; init; } = "";
+    /// <summary>Flygplanets faktiska ATC ID, avläst från simulatorn vid sparning. Skrivs tillbaka vid laddning.</summary>
+    public string AtcId { get; init; } = "";
     public string Title { get; init; } = "";
     public DateTime SavedAtUtc { get; init; }
     public PositionState Position { get; init; } = new();

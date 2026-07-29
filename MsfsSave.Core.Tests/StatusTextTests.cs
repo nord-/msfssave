@@ -5,7 +5,7 @@ namespace MsfsSave.Core.Tests;
 public class StatusTextTests
 {
     private static LoadResult Load(bool mismatch, bool atcIdSet) =>
-        new(new AircraftState { Registration = "SE-ABC", Title = "Cessna 172" },
+        new(new AircraftState { SlotName = "SE-ABC", AtcId = "SE-ABC", Title = "Cessna 172" },
             mismatch, mismatch ? "Piper PA-28" : "Cessna 172", atcIdSet);
 
     [Fact]
@@ -38,7 +38,7 @@ public class StatusTextTests
     [Fact]
     public void Saved_distinguishes_new_from_overwrite()
     {
-        var state = new AircraftState { Registration = "SE-ABC" };
+        var state = new AircraftState { SlotName = "SE-ABC" };
         Assert.Equal("✓ Sparade SE-ABC.", StatusText.Saved(new SaveResult(state, false)));
         Assert.Equal("✓ Skrev över SE-ABC.", StatusText.Saved(new SaveResult(state, true)));
     }

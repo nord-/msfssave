@@ -77,7 +77,15 @@ varje tank med `FuelMath.ClampToCapacity`, och skriver alla 11 tankar atomiskt i
 
 ## Domänmodell
 
-Registreringen (ATC ID) är nyckeln: filnamn i `StateStore` (saniterat) och etikett i simulatorn.
+`AircraftState` har två separata namn-fält som inte får slås ihop:
+
+- **`SlotName`** — fritt textnamn valt av användaren i F2-prompten (t.ex. en plats som
+  "Höganäs"). Används enbart som filnyckel i `StateStore` (saniterat) och som etikett i listan.
+  Skrivs aldrig till simulatorn.
+- **`AtcId`** — flygplanets faktiska registrering, avläst från simulatorn av `Capture()` vid
+  sparning. Detta är värdet `TrySetAtcId` skriver tillbaka vid laddning, oavsett vad
+  sparplatsen heter.
+
 Verktyget kan **inte** byta laddad flygplansmodell — vid laddning jämförs sparad `Title` mot
 faktiskt laddad titel och användaren varnas vid mismatch, men laddningen fortsätter.
 

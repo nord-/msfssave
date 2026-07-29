@@ -30,11 +30,11 @@ public class SavedList
         if (SelectedIndex >= 0 && SelectedIndex < _items.Count - 1) SelectedIndex++;
     }
 
-    /// <summary>Ställer markören på posten. Lämnar markören orörd vid okänd registrering.</summary>
-    public void SelectByRegistration(string registration)
+    /// <summary>Ställer markören på posten. Lämnar markören orörd vid okänt namn.</summary>
+    public void SelectBySlotName(string slotName)
     {
         var index = _items.FindIndex(s =>
-            string.Equals(s.Registration, registration, StringComparison.OrdinalIgnoreCase));
+            string.Equals(s.SlotName, slotName, StringComparison.OrdinalIgnoreCase));
         if (index >= 0) SelectedIndex = index;
     }
 }

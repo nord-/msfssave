@@ -4,7 +4,7 @@ namespace MsfsSave.Core.Tests;
 
 public class SavedListTests
 {
-    private static AircraftState State(string reg) => new() { Registration = reg, Title = "Cessna 172" };
+    private static AircraftState State(string name) => new() { SlotName = name, Title = "Cessna 172" };
 
     private static SavedList WithThree()
     {
@@ -27,7 +27,7 @@ public class SavedListTests
     {
         var list = WithThree();
         Assert.Equal(0, list.SelectedIndex);
-        Assert.Equal("A", list.Selected!.Registration);
+        Assert.Equal("A", list.Selected!.SlotName);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class SavedListTests
         list.Replace(new[] { State("A") });
 
         Assert.Equal(0, list.SelectedIndex);
-        Assert.Equal("A", list.Selected!.Registration);
+        Assert.Equal("A", list.Selected!.SlotName);
     }
 
     [Fact]
@@ -95,22 +95,22 @@ public class SavedListTests
     }
 
     [Fact]
-    public void SelectByRegistration_moves_selection_to_match()
+    public void SelectBySlotName_moves_selection_to_match()
     {
         var list = WithThree();
 
-        list.SelectByRegistration("C");
+        list.SelectBySlotName("C");
 
         Assert.Equal(2, list.SelectedIndex);
     }
 
     [Fact]
-    public void SelectByRegistration_leaves_selection_when_unknown()
+    public void SelectBySlotName_leaves_selection_when_unknown()
     {
         var list = WithThree();
         list.MoveDown();
 
-        list.SelectByRegistration("OKÄND");
+        list.SelectBySlotName("OKÄND");
 
         Assert.Equal(1, list.SelectedIndex);
     }
