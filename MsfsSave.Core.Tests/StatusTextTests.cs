@@ -1,4 +1,4 @@
-using MsfsSave.Core;
+﻿using MsfsSave.Core;
 
 namespace MsfsSave.Core.Tests;
 
@@ -62,5 +62,39 @@ public class StatusTextTests
     {
         Assert.Equal("✗ Fel: Inget svar från simulatorn inom tidsgränsen.",
             StatusText.Error("Inget svar från simulatorn inom tidsgränsen."));
+    }
+
+    [Fact]
+    public void LockReason_forklarar_att_simulatorn_inte_ar_igang()
+    {
+        Assert.Equal("MSFS är inte igång — försöker ansluta",
+            StatusText.LockReason(connected: false, readiness: null, error: ""));
+    }
+
+    [Fact]
+    public void LockReason_namner_simulatorn_forst_aven_nar_ett_fel_finns_kvar()
+    {
+        Assert.Equal("MSFS är inte igång — försöker ansluta",
+            StatusText.LockReason(false, null, "Inte ansluten till simulatorn."));
+    }
+
+    [Fact]
+    public void LockReason_ger_planets_brist_nar_anslutningen_lever()
+    {
+        Assert.Equal("planet är i luften",
+            StatusText.LockReason(true, new SimReadiness(false, true, true), ""));
+    }
+
+    [Fact]
+    public void LockReason_visar_felet_nar_anslutningen_lever_men_avlasningen_misslyckades()
+    {
+        Assert.Equal("simulatorns tillstånd är okänt (timeout)",
+            StatusText.LockReason(true, null, "timeout"));
+    }
+
+    [Fact]
+    public void LockReason_ar_null_nar_ingenting_blockerar()
+    {
+        Assert.Null(StatusText.LockReason(true, new SimReadiness(true, true, true), ""));
     }
 }

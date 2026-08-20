@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -38,6 +38,13 @@ Tre projekt med en avsiktlig gräns mellan testbart och sim-beroende:
 **Lägg aldrig SimConnect-beroenden i Core, och aldrig affärslogik i `Menu`.** Ny logik som är
 värd att testa hör hemma i Core bakom `ISimConnector`.
 
+Appen kräver **inte** en körande simulator för att starta. `Program` ansluter inte alls — `Menu`
+gör det själv och försöker om var femte sekund, så listan går att läsa och poster att ta bort utan
+MSFS, och headern slår om av sig själv när simulatorn dyker upp. Därför pollar huvudloopen
+`Console.KeyAvailable` i stället för att blockera i `Console.ReadKey`; återanslutningen sker i
+huvudtråden, inte på en bakgrundstråd, så inget konkurrerar om `Console` eller `SimConnector`.
+Ett misslyckat `Connect` kostar ~450 ms, vilket är skälet till att intervallet inte är kortare.
+
 `SimConnector`, `Menu` och `Program` kan inte enhetstestas — de verifieras manuellt mot en
 körande MSFS enligt checklistan i Task 10 i planen (se `docs/superpowers/plans/`).
 
@@ -51,6 +58,11 @@ Dessa är lätta att bryta och ger tyst korrupt data snarare än kompileringsfel
 - **Payload läses/skrivs station för station**: antalet stationer är okänt vid kompilering, så
   `DEFINITIONS.PayloadStation` rensas (`ClearDataDefinition`) och registreras om per index.
   Skrivning är best-effort per station — en station som saknas i det laddade planet hoppas över.
+- **`Disconnect` och `Dispose` är inte samma sak.** `Disconnect` släpper `_sc` men behåller
+  `EventWaitHandle`, så objektet kan anslutas om; `Dispose` gör båda. `OnRecvQuit` måste anropa
+  `Disconnect` — anropar den `Dispose` dör event-handlen och alla senare anslutningsförsök
+  misslyckas när simulatorn startas igen. `Connect` kopplar ner en gammal anslutning först och
+  städar om `Define*` kastar, så ett halvregistrerat läge aldrig blir kvar.
 - **Konsollen har ingen fönsterpump.** `SimConnector` använder ett `EventWaitHandle` och pumpar
   själv i `PumpUntilReceived`, som är kvalificerad på `REQUESTS`-id så att svar på fel förfrågan
   inte råkar avsluta väntan. Timeout är 5 s per avläsning.
