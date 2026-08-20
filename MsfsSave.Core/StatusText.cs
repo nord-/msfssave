@@ -1,4 +1,4 @@
-﻿namespace MsfsSave.Core;
+namespace MsfsSave.Core;
 
 /// <summary>Statusradens texter. Ren formatering så att ordalydelsen kan låsas med tester.</summary>
 public static class StatusText

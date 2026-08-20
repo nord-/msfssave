@@ -1,4 +1,4 @@
-﻿using MsfsSave.Core;
+using MsfsSave.Core;
 
 namespace MsfsSave.Core.Tests;
 
