@@ -48,9 +48,10 @@ public class Menu
 
             if (key.Key == ConsoleKey.Escape) return;
 
-            // Tillståndet läses en gång per åtgärdstangent — aldrig vid pilnavigering,
-            // som annars skulle kunna blockera 5 s när simulatorn inte svarar.
-            if (IsActionKey(key))
+            // Simulatorn rörs en gång per tangent som faktiskt behöver den — aldrig vid
+            // pilnavigering eller Delete, som annars skulle betala ~450 ms för ett misslyckat
+            // Connect plus upp till 5 s när simulatorn inte svarar.
+            if (UsesSim(key))
             {
                 TryConnect();
                 RefreshReadiness();
@@ -73,10 +74,13 @@ public class Menu
         }
     }
 
-    private static bool IsActionKey(ConsoleKeyInfo key) => key.Key switch
+    /// <summary>
+    /// Tangenter vars åtgärd kräver simulatorn. Delete står medvetet utanför — borttagning rör
+    /// bara sparfilerna och ska svara direkt även när MSFS är avstängt.
+    /// </summary>
+    private static bool UsesSim(ConsoleKeyInfo key) => key.Key switch
     {
-        ConsoleKey.Enter => true,
-        ConsoleKey.F2 or ConsoleKey.F5 or ConsoleKey.Delete => true,
+        ConsoleKey.Enter or ConsoleKey.F2 or ConsoleKey.F5 => true,
         ConsoleKey.R when key.Modifiers == ConsoleModifiers.None => true,
         _ => false
     };
@@ -87,6 +91,10 @@ public class Menu
     {
         var chosen = _list.Selected;
         if (chosen is null) return;
+
+        // Samma spärr som DoSave, så statusraden säger samma sak som headern i stället för att
+        // AppService.RequireReady kastar ett rått "Inte ansluten till simulatorn".
+        if (Blocked("ladda")) return;
 
         try
         {
