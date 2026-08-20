@@ -8,19 +8,22 @@ public class Menu
 {
     private readonly AppService _app;
     private readonly ISimConnector _sim;
+    private readonly ISimProbe _probe;
     private readonly SavedList _list = new();
-    // 5 s: ett misslyckat SimConnect-försök blockerar tråden ~450 ms, så tätare försök skulle
-    // märkas som tröghet i navigeringen så länge simulatorn är avstängd.
-    private readonly ReconnectPolicy _reconnect = new(TimeSpan.FromSeconds(5));
+    private readonly ReconnectPolicy _reconnect = new(TimeSpan.FromSeconds(3));
     private SimReadiness? _readiness;
     private string _readinessError = "";
     private string _status = "";
     private bool _prompting;
 
-    public Menu(AppService app, ISimConnector sim)
+    /// <summary>Pågående sondering, eller null när ingen är ute. Rörs bara av UI-tråden.</summary>
+    private Task<bool>? _probing;
+
+    public Menu(AppService app, ISimConnector sim, ISimProbe probe)
     {
         _app = app;
         _sim = sim;
+        _probe = probe;
     }
 
     public void Run()
@@ -184,11 +187,26 @@ public class Menu
     /// <summary>
     /// Ett varv utan tangenttryck. Sant när skärmen behöver ritas om — bara vid faktisk
     /// förändring, annars skulle Console.Clear flimra tio gånger i sekunden.
+    ///
+    /// Ett misslyckat Connect kostar ~450 ms, så det får inte ske här. I stället sonderar en
+    /// bakgrundstråd om simulatorn svarar, och den riktiga anslutningen görs först när svaret
+    /// är ja — då lyckas den, och tangentloopen står aldrig och väntar.
     /// </summary>
     private bool Tick()
     {
         var wasConnected = _sim.IsConnected;
-        if (_reconnect.ShouldAttempt(wasConnected, DateTime.UtcNow)) TryConnect();
+
+        if (_probing is null)
+        {
+            if (_reconnect.ShouldAttempt(wasConnected, DateTime.UtcNow))
+                _probing = Task.Run(_probe.IsAvailable);
+        }
+        else if (_probing.IsCompleted)
+        {
+            var available = _probing.Status == TaskStatus.RanToCompletion && _probing.Result;
+            _probing = null;
+            if (available) TryConnect();
+        }
 
         if (_sim.IsConnected == wasConnected) return false;
 

@@ -8,4 +8,4 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 using var sim = new SimConnector();
 var store = new StateStore(StateStore.DefaultDirectory);
 var app = new AppService(sim, store);
-new Menu(app, sim).Run();
+new Menu(app, sim, new SimProbe()).Run();
