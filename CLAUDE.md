@@ -86,6 +86,12 @@ varje tank med `FuelMath.ClampToCapacity`, och skriver alla 11 tankar atomiskt i
   sparning. Detta är värdet `TrySetAtcId` skriver tillbaka vid laddning, oavsett vad
   sparplatsen heter.
 
+Sparfiler från före uppdelningen har ett enda `Registration`-fält. `StateStore.Read` migrerar dem
+vid inläsning: `Registration` fyller både `SlotName` och `AtcId`, och saknas även det används
+filnamnet som `SlotName`. Utan det får posten tomt `SlotName` och blir omöjlig att ladda, skriva
+över eller ta bort, eftersom filnyckeln utgår från `SlotName`. Migreringen sker bara i minnet —
+filen skrivs om först nästa gång användaren sparar över den.
+
 Verktyget kan **inte** byta laddad flygplansmodell — vid laddning jämförs sparad `Title` mot
 faktiskt laddad titel och användaren varnas vid mismatch, men laddningen fortsätter.
 

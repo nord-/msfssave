@@ -108,4 +108,89 @@ public class StateStoreTests
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
+
+    /// <summary>Sparfiler från före uppdelningen SlotName/AtcId har ett enda "Registration"-fält.</summary>
+    private const string LegacyJson = """
+        {
+          "Registration": "Bornholm",
+          "Title": "Black Square A36TC Bonanza Professional N3475M",
+          "SavedAtUtc": "2026-07-25T12:57:16.6478047Z",
+          "Position": { "Latitude": 55.07, "Longitude": 14.74, "OnGround": true },
+          "FuelGallons": { "LeftMain": 20.0 },
+          "PayloadLbs": []
+        }
+        """;
+
+    [Fact]
+    public void List_migrerar_gammalt_Registration_till_SlotName_och_AtcId()
+    {
+        var dir = TempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "Bornholm.json"), LegacyJson);
+            var store = new StateStore(dir);
+
+            var only = Assert.Single(store.List());
+
+            Assert.Equal("Bornholm", only.SlotName);
+            Assert.Equal("Bornholm", only.AtcId);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Load_migrerar_gammalt_Registration_till_SlotName_och_AtcId()
+    {
+        var dir = TempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "Bornholm.json"), LegacyJson);
+            var store = new StateStore(dir);
+
+            var loaded = store.Load("Bornholm");
+
+            Assert.NotNull(loaded);
+            Assert.Equal("Bornholm", loaded!.SlotName);
+            Assert.Equal("Bornholm", loaded.AtcId);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Listad_gammal_post_kan_tas_bort_via_sitt_SlotName()
+    {
+        var dir = TempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "Bornholm.json"), LegacyJson);
+            var store = new StateStore(dir);
+
+            var only = store.List()[0];
+
+            Assert.True(store.Delete(only.SlotName));
+            Assert.Empty(store.List());
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void List_faller_tillbaka_pa_filnamnet_nar_bade_SlotName_och_Registration_saknas()
+    {
+        var dir = TempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "outback.json"), """{ "Title": "Cessna 170B" }""");
+            var store = new StateStore(dir);
+
+            var only = Assert.Single(store.List());
+
+            Assert.Equal("outback", only.SlotName);
+            Assert.True(store.Delete(only.SlotName));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
 }
