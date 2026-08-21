@@ -3,18 +3,9 @@ using MsfsSave.Core;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+// Anslutningen avgör inte om appen får köra. Utan simulator går listan att läsa och poster att
+// ta bort; Menu ansluter själv så snart MSFS finns där.
 using var sim = new SimConnector();
-try
-{
-    sim.Connect();
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Kunde inte ansluta till simulatorn: {ex.Message}");
-    Console.WriteLine("Starta MSFS och ladda ett flygplan, försök sedan igen.");
-    return;
-}
-
 var store = new StateStore(StateStore.DefaultDirectory);
 var app = new AppService(sim, store);
-new Menu(app, sim).Run();
+new Menu(app, sim, new SimProbe()).Run();

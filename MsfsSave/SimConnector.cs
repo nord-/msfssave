@@ -100,18 +100,33 @@ public sealed class SimConnector : ISimConnector
 
     public void Connect()
     {
+        // Släpp en eventuell tidigare anslutning först — Connect anropas om varje gång
+        // simulatorn startas efter oss, eller startas om under körning.
+        Disconnect();
+
         _sc = new SimConnect("msfssave", IntPtr.Zero, WM_USER_SIMCONNECT, _event, 0);
-        _sc.OnRecvQuit += (_, _) => Dispose();
+        // Disconnect, inte Dispose: simulatorn kan stängas och startas igen under vår livstid,
+        // och Dispose släpper event-handlen som alla senare anslutningar behöver.
+        _sc.OnRecvQuit += (_, _) => Disconnect();
         _sc.OnRecvException += (_, e) => Console.Error.WriteLine($"SimConnect-undantag: {e.dwException}");
         _sc.OnRecvSimobjectData += OnRecvData;
 
-        DefineAircraft();
-        DefineFuel();
-        DefineFuelWrite();
-        DefineInitPosition();
-        DefineAtcId();
-        DefinePayloadCount();
-        DefineReadiness();
+        try
+        {
+            DefineAircraft();
+            DefineFuel();
+            DefineFuelWrite();
+            DefineInitPosition();
+            DefineAtcId();
+            DefinePayloadCount();
+            DefineReadiness();
+        }
+        catch
+        {
+            // Lämna aldrig kvar en halvregistrerad anslutning — nästa försök börjar om från noll.
+            Disconnect();
+            throw;
+        }
 
         // Initial avläsning för header (icke-kritisk — kan misslyckas om inget plan är laddat än).
         try
@@ -441,10 +456,20 @@ public sealed class SimConnector : ISimConnector
         }
     }
 
-    public void Dispose()
+    /// <summary>Kopplar ner från simulatorn men behåller objektet användbart för nya försök.</summary>
+    public void Disconnect()
     {
         _sc?.Dispose();
         _sc = null;
+        _awaiting = null;
+        _received = false;
+        CurrentTitle = "";
+        CurrentAtcId = "";
+    }
+
+    public void Dispose()
+    {
+        Disconnect();
         _event.Dispose();
     }
 }

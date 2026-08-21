@@ -8,33 +8,57 @@ public class Menu
 {
     private readonly AppService _app;
     private readonly ISimConnector _sim;
+    private readonly ISimProbe _probe;
     private readonly SavedList _list = new();
+    private readonly ReconnectPolicy _reconnect = new(TimeSpan.FromSeconds(3));
     private SimReadiness? _readiness;
     private string _readinessError = "";
     private string _status = "";
     private bool _prompting;
 
-    public Menu(AppService app, ISimConnector sim)
+    /// <summary>Pågående sondering, eller null när ingen är ute. Rörs bara av UI-tråden.</summary>
+    private Task<bool>? _probing;
+
+    public Menu(AppService app, ISimConnector sim, ISimProbe probe)
     {
         _app = app;
         _sim = sim;
+        _probe = probe;
     }
 
     public void Run()
     {
         RefreshList();
-        RefreshReadiness();
+        TryConnect();
+        if (_sim.IsConnected) RefreshReadiness();
         Draw(_status);
 
         while (true)
         {
+            // Ingen blockerande ReadKey: loopen måste komma tillbaka regelbundet för att kunna
+            // återansluta av sig själv. Allt sker ändå i den här tråden — inget konkurrerar om
+            // Console, och skärmen ritas bara om när något faktiskt ändrats.
+            if (!Console.KeyAvailable)
+            {
+                if (Tick()) Draw(_status);
+                // Ett anslutningsförsök kan ha tagit några hundra ms — kom en tangent under det
+                // ska den behandlas nu, inte efter ytterligare en sömn.
+                if (!Console.KeyAvailable) Thread.Sleep(PollInterval);
+                continue;
+            }
+
             var key = Console.ReadKey(intercept: true);
 
             if (key.Key == ConsoleKey.Escape) return;
 
-            // Tillståndet läses en gång per åtgärdstangent — aldrig vid pilnavigering,
-            // som annars skulle kunna blockera 5 s när simulatorn inte svarar.
-            if (IsActionKey(key)) RefreshReadiness();
+            // Simulatorn rörs en gång per tangent som faktiskt behöver den — aldrig vid
+            // pilnavigering eller Delete, som annars skulle betala ~450 ms för ett misslyckat
+            // Connect plus upp till 5 s när simulatorn inte svarar.
+            if (UsesSim(key))
+            {
+                TryConnect();
+                RefreshReadiness();
+            }
 
             var handled = true;
             switch (key.Key)
@@ -53,10 +77,13 @@ public class Menu
         }
     }
 
-    private static bool IsActionKey(ConsoleKeyInfo key) => key.Key switch
+    /// <summary>
+    /// Tangenter vars åtgärd kräver simulatorn. Delete står medvetet utanför — borttagning rör
+    /// bara sparfilerna och ska svara direkt även när MSFS är avstängt.
+    /// </summary>
+    private static bool UsesSim(ConsoleKeyInfo key) => key.Key switch
     {
-        ConsoleKey.Enter => true,
-        ConsoleKey.F2 or ConsoleKey.F5 or ConsoleKey.Delete => true,
+        ConsoleKey.Enter or ConsoleKey.F2 or ConsoleKey.F5 => true,
         ConsoleKey.R when key.Modifiers == ConsoleModifiers.None => true,
         _ => false
     };
@@ -67,6 +94,10 @@ public class Menu
     {
         var chosen = _list.Selected;
         if (chosen is null) return;
+
+        // Samma spärr som DoSave, så statusraden säger samma sak som headern i stället för att
+        // AppService.RequireReady kastar ett rått "Inte ansluten till simulatorn".
+        if (Blocked("ladda")) return;
 
         try
         {
@@ -83,11 +114,7 @@ public class Menu
     {
         // Tillståndet är redan läst för det här tangenttrycket. Kontrollen här är bara till för
         // att slippa visa prompten i onödan; AppService.RequireReady är den verkliga spärren.
-        if (_readiness is null || !_readiness.CanTransfer)
-        {
-            _status = StatusText.Blocked("spara", _readiness?.BlockReason ?? "simulatorns tillstånd är okänt");
-            return;
-        }
+        if (Blocked("spara")) return;
 
         var suggestion = (_sim.CurrentAtcId ?? "").Trim();
         var input = Prompt($"Namn på sparplats [{suggestion}]: ");
@@ -115,11 +142,7 @@ public class Menu
         if (chosen is null) return;
 
         // Samma spärr som DoSave — RefreshReadiness har redan körts för det här tangenttrycket.
-        if (_readiness is null || !_readiness.CanTransfer)
-        {
-            _status = StatusText.Blocked("spara", _readiness?.BlockReason ?? "simulatorns tillstånd är okänt");
-            return;
-        }
+        if (Blocked("spara")) return;
 
         try
         {
@@ -150,10 +173,73 @@ public class Menu
 
     // ── Tillstånd ─────────────────────────────────────────────────────────
 
+    private const int PollInterval = 100;
+
+    /// <summary>Sant när överföring är spärrad; sätter då statusraden med samma orsak som headern.</summary>
+    private bool Blocked(string verb)
+    {
+        var reason = StatusText.LockReason(_sim.IsConnected, _readiness, _readinessError);
+        if (reason is null) return false;
+        _status = StatusText.Blocked(verb, reason);
+        return true;
+    }
+
+    /// <summary>
+    /// Ett varv utan tangenttryck. Sant när skärmen behöver ritas om — bara vid faktisk
+    /// förändring, annars skulle Console.Clear flimra tio gånger i sekunden.
+    ///
+    /// Ett misslyckat Connect kostar ~450 ms, så det får inte ske här. I stället sonderar en
+    /// bakgrundstråd om simulatorn svarar, och den riktiga anslutningen görs först när svaret
+    /// är ja — då lyckas den, och tangentloopen står aldrig och väntar.
+    /// </summary>
+    private bool Tick()
+    {
+        var wasConnected = _sim.IsConnected;
+
+        if (_probing is null)
+        {
+            if (_reconnect.ShouldAttempt(wasConnected, DateTime.UtcNow))
+                _probing = Task.Run(_probe.IsAvailable);
+        }
+        else if (_probing.IsCompleted)
+        {
+            var available = _probing.Status == TaskStatus.RanToCompletion && _probing.Result;
+            _probing = null;
+            if (available) TryConnect();
+        }
+
+        if (_sim.IsConnected == wasConnected) return false;
+
+        if (_sim.IsConnected) RefreshReadiness();
+        else _readiness = null;
+        return true;
+    }
+
+    /// <summary>Ett anslutningsförsök. Misslyckas tyst — headern visar redan att simen saknas.</summary>
+    private void TryConnect()
+    {
+        if (_sim.IsConnected) return;
+        try
+        {
+            _sim.Connect();
+            _readinessError = "";
+        }
+        catch
+        {
+            // Nästa försök kommer om några sekunder; ingen anledning att skrika om varje.
+        }
+    }
+
     private void RefreshList() => _list.Replace(_app.List());
 
     private void RefreshReadiness()
     {
+        if (!_sim.IsConnected)
+        {
+            _readiness = null;
+            return;
+        }
+
         try
         {
             _readiness = _sim.ReadReadiness();
@@ -189,14 +275,13 @@ public class Menu
             : $"{_sim.CurrentTitle} / {_sim.CurrentAtcId}";
         WriteRow($"=== msfssave ===        {connection}: {plane}");
 
-        var locked = _readiness is null || !_readiness.CanTransfer;
+        var reason = StatusText.LockReason(_sim.IsConnected, _readiness, _readinessError);
+        var locked = reason != null;
         if (locked)
         {
-            var reason = _readiness?.BlockReason
-                ?? (_readinessError.Length > 0
-                    ? $"simulatorns tillstånd är okänt ({_readinessError})"
-                    : "simulatorns tillstånd är okänt");
-            WriteRow($" ⚑ Spara och ladda låst: {reason}. Tryck R för att läsa om.");
+            // Ingen uppmaning att trycka R utan anslutning — den kommer av sig själv.
+            var hint = _sim.IsConnected ? " Tryck R för att läsa om." : "";
+            WriteRow($" ⚑ Spara och ladda låst: {reason}.{hint}");
         }
 
         Console.WriteLine();

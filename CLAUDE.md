@@ -38,6 +38,17 @@ Tre projekt med en avsiktlig gräns mellan testbart och sim-beroende:
 **Lägg aldrig SimConnect-beroenden i Core, och aldrig affärslogik i `Menu`.** Ny logik som är
 värd att testa hör hemma i Core bakom `ISimConnector`.
 
+Appen kräver **inte** en körande simulator för att starta. `Program` ansluter inte alls — `Menu`
+gör det själv och försöker om var tredje sekund, så listan går att läsa och poster att ta bort utan
+MSFS, och headern slår om av sig själv när simulatorn dyker upp. Därför pollar huvudloopen
+`Console.KeyAvailable` i stället för att blockera i `Console.ReadKey`.
+
+Väntan ligger i `SimProbe` på en bakgrundstråd, medan `SimConnector.Connect` alltid körs på
+UI-tråden först när sonderingen svarat ja. Uppdelningen är avsiktlig: sonderingen skapar och
+slänger sitt eget SimConnect-objekt inuti anropet, så inget objekt delas mellan trådar och
+`SimConnector`s fält (`_awaiting`, `_lastAircraft`, …) rörs bara av en tråd. **`SimProbe` måste
+förbli statslös** — får den instansfält som `Menu` också läser är racet tillbaka.
+
 `SimConnector`, `Menu` och `Program` kan inte enhetstestas — de verifieras manuellt mot en
 körande MSFS enligt checklistan i Task 10 i planen (se `docs/superpowers/plans/`).
 
@@ -51,6 +62,16 @@ Dessa är lätta att bryta och ger tyst korrupt data snarare än kompileringsfel
 - **Payload läses/skrivs station för station**: antalet stationer är okänt vid kompilering, så
   `DEFINITIONS.PayloadStation` rensas (`ClearDataDefinition`) och registreras om per index.
   Skrivning är best-effort per station — en station som saknas i det laddade planet hoppas över.
+- **En misslyckad `SimConnect`-konstruktor läcker ~4,5 handles per anrop** och läckan går inte
+  att städa utifrån — kastar konstruktorn finns inget objekt att kassera. Därför får `Open` aldrig
+  anropas i en evig loop: `SimProbe` kollar först att en process med prefixet `FlightSimulator`
+  kör (~5 ms, läcker inget) och rör SimConnect först då. Mätt: 100 blinda `Open`-försök gav +400
+  handles, samma antal sonderingar ger +9.
+- **`Disconnect` och `Dispose` är inte samma sak.** `Disconnect` släpper `_sc` men behåller
+  `EventWaitHandle`, så objektet kan anslutas om; `Dispose` gör båda. `OnRecvQuit` måste anropa
+  `Disconnect` — anropar den `Dispose` dör event-handlen och alla senare anslutningsförsök
+  misslyckas när simulatorn startas igen. `Connect` kopplar ner en gammal anslutning först och
+  städar om `Define*` kastar, så ett halvregistrerat läge aldrig blir kvar.
 - **Konsollen har ingen fönsterpump.** `SimConnector` använder ett `EventWaitHandle` och pumpar
   själv i `PumpUntilReceived`, som är kvalificerad på `REQUESTS`-id så att svar på fel förfrågan
   inte råkar avsluta väntan. Timeout är 5 s per avläsning.
